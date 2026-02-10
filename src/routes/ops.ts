@@ -1,7 +1,11 @@
 import { Hono } from 'hono';
 import type { AppEnv } from '../types';
 import { createAccessMiddleware } from '../auth';
-import { ensureMoltbotGateway, findExistingMoltbotProcess } from '../gateway';
+import { ensureMoltbotGateway, findExistingMoltbotProcess, waitForProcess } from '../gateway';
+import { isAllowedConfigPath } from './ops-allowlist';
+
+// CLI commands can take 10-15 seconds to complete due to WebSocket connection overhead
+const CLI_TIMEOUT_MS = 20000;
 
 export const ops = new Hono<AppEnv>();
 
@@ -97,5 +101,107 @@ ops.get('/logs', async (c) => {
       },
       500,
     );
+  }
+});
+
+ops.post('/restart', async (c) => {
+  const sandbox = c.get('sandbox');
+
+  try {
+    const existingProcess = await findExistingMoltbotProcess(sandbox);
+
+    if (existingProcess) {
+      try {
+        await existingProcess.kill();
+      } catch (killError) {
+        console.error('Error killing process:', killError);
+      }
+      await new Promise((r) => setTimeout(r, 2000));
+    }
+
+    const bootPromise = ensureMoltbotGateway(sandbox, c.env).catch((err) => {
+      console.error('Gateway restart failed:', err);
+    });
+    c.executionCtx.waitUntil(bootPromise);
+
+    return c.json({
+      success: true,
+      message: existingProcess
+        ? 'Gateway process killed, new instance starting...'
+        : 'No existing process found, starting new instance...',
+      previousProcessId: existingProcess?.id,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    return c.json({ error: message }, 500);
+  }
+});
+
+ops.get('/config/get', async (c) => {
+  const sandbox = c.get('sandbox');
+  const path = c.req.query('path');
+
+  if (!path) {
+    return c.json({ error: 'Missing path parameter' }, 400);
+  }
+
+  if (!isAllowedConfigPath(path)) {
+    return c.json({ error: 'Config path not allowed' }, 403);
+  }
+
+  try {
+    await ensureMoltbotGateway(sandbox, c.env);
+    const proc = await sandbox.startProcess(
+      `openclaw config get ${path} --url ws://localhost:18789`,
+    );
+    await waitForProcess(proc, CLI_TIMEOUT_MS);
+    const logs = await proc.getLogs();
+
+    return c.json({
+      success: proc.exitCode === 0,
+      path,
+      status: proc.status,
+      exitCode: proc.exitCode,
+      stdout: logs.stdout || '',
+      stderr: logs.stderr || '',
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    return c.json({ error: message }, 500);
+  }
+});
+
+ops.post('/config/set', async (c) => {
+  const sandbox = c.get('sandbox');
+  const path = c.req.query('path');
+  const value = c.req.query('value');
+
+  if (!path || value === undefined) {
+    return c.json({ error: 'Missing path or value parameter' }, 400);
+  }
+
+  if (!isAllowedConfigPath(path)) {
+    return c.json({ error: 'Config path not allowed' }, 403);
+  }
+
+  try {
+    await ensureMoltbotGateway(sandbox, c.env);
+    const proc = await sandbox.startProcess(
+      `openclaw config set ${path} ${value} --url ws://localhost:18789`,
+    );
+    await waitForProcess(proc, CLI_TIMEOUT_MS);
+    const logs = await proc.getLogs();
+
+    return c.json({
+      success: proc.exitCode === 0,
+      path,
+      status: proc.status,
+      exitCode: proc.exitCode,
+      stdout: logs.stdout || '',
+      stderr: logs.stderr || '',
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    return c.json({ error: message }, 500);
   }
 });
