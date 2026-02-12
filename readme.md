@@ -159,6 +159,85 @@ DEV_MODE=true               # Skip Cloudflare Access auth + bypass device pairin
 DEBUG_ROUTES=true           # Enable /debug/* routes (optional)
 ```
 
+## Project Workflow
+
+### Canonical Workflow
+This file is the single source of truth for engineering workflow in this repo.
+
+### Scope
+- Repo: `rstephens1/openclaw`
+- Stack: `Cloudflare Workers + Cloudflare Sandbox + TypeScript + Hono + React/Vite`
+- Primary local preview: `http://localhost:8787` (worker), `http://localhost:5173` (Vite client when running)
+
+### Workflow Order (Required)
+
+1. Environment
+- Use Docker when runtime parity, containerized tooling, or CI parity is required.
+- If Docker is not needed, run directly in the local repo.
+
+2. Build/Test
+- Run relevant test/build commands first.
+- At minimum, run the primary build/smoke command for the project.
+
+3. UI/HTTP Evidence (Rodney)
+- If UI or HTTP behavior changed, capture at least one Rodney run:
+  - open target page/endpoint
+  - exercise key interaction/path
+  - capture screenshot (or equivalent evidence)
+- If no UI/HTTP changes, Rodney is optional.
+
+4. Evidence Capture (Showboat)
+- Record exact commands and outputs in a Showboat demo doc.
+- Include Rodney image evidence using Showboat `image` when applicable.
+
+5. Verification
+- Run `showboat verify <demo-doc>` before merge.
+- If verification fails, fix non-deterministic commands (or update the demo) and re-run until it passes.
+
+### Testing And Evidence (Showboat/Rodney)
+- After implementing a feature and tests pass (before opening a PR), update or create a Showboat demo doc that captures:
+  - exact test command and output
+  - key operational commands or verification steps
+- Before merging a PR:
+  - run `showboat verify`
+  - confirm outputs still match the demo
+- If UI or HTTP behavior changes:
+  - capture at least one Rodney screenshot or interaction
+  - include it via Showboat `image`
+- Before release/deploy for user-visible UI changes:
+  - record a short Rodney run (open page, click key paths, screenshot)
+  - include it in the demo doc
+- Showboat/Rodney are manual evidence tools; they are not auto-run.
+- If no UI changes occurred, Rodney is not required.
+
+- Automated tests:
+  - If no project test runner is configured, use targeted command evidence and smoke checks until tests are added.
+
+### Tooling Setup
+
+Install tools (once per machine):
+```bash
+uv tool install showboat
+uv tool install rodney
+```
+
+Use repo wrappers (PATH-safe):
+```bash
+./scripts/showboat.sh --help
+./scripts/rodney.sh --help
+```
+
+Quick evidence flow:
+```bash
+./scripts/showboat.sh init docs/showboat-demo.md "Testing Evidence"
+./scripts/showboat.sh note docs/showboat-demo.md "Describe what changed"
+./scripts/showboat.sh exec docs/showboat-demo.md bash "<test-or-build-command>"
+./scripts/rodney.sh start
+./scripts/showboat.sh image docs/showboat-demo.md "./scripts/rodney.sh open <url> && ./scripts/rodney.sh waitstable && ./scripts/rodney.sh screenshot docs/<name>.png"
+./scripts/rodney.sh stop
+./scripts/showboat.sh verify docs/showboat-demo.md
+```
+
 ## Authentication
 
 By default, moltbot uses **device pairing** for authentication. When a new device (browser, CLI, etc.) connects, it must be approved via the admin UI at `/_admin/`.

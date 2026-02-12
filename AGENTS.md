@@ -99,10 +99,10 @@ When adding new functionality, add corresponding tests.
 
 ## Documentation
 
-- `README.md` - User-facing documentation (setup, configuration, usage)
+- `readme.md` - User-facing documentation (setup, configuration, usage)
 - `AGENTS.md` - This file, for AI agents
 
-Development documentation goes in AGENTS.md, not README.md.
+Development documentation goes in AGENTS.md, not readme.md.
 
 ---
 
@@ -232,7 +232,7 @@ See [OpenClaw docs](https://docs.openclaw.ai/) for full schema.
 1. Add to `MoltbotEnv` interface in `src/types.ts`
 2. If passed to container, add to `buildEnvVars()` in `src/gateway/env.ts`
 3. Update `.dev.vars.example`
-4. Document in README.md secrets table
+4. Document in readme.md secrets table
 
 ### Debugging
 
